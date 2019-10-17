@@ -1,21 +1,54 @@
 env:
   global:
     - CC_TEST_REPORTER_ID=6805394e7fbeae5625e7fc12bec771f671f0fb3a284e83d4ce023abb7a80509b
+
+stages:
+  - test
+  - name: documentation
+    if: tag =~ ^v\d+\.\d+\.\d+.*
+  - name: package
+    if: tag =~ ^v\d+\.\d+\.\d+.*
+
 language: python
 email:
-  on_success: always
-  on_failure: always
+    on_success: always
+    on_failure: always
 python:
-  - "3.6"
-before_script:
-  - curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
-  - chmod +x ./cc-test-reporter
-  - ./cc-test-reporter before-build
-script:
-  - pytest --cov-report xml --cov=tfs tests
-  - travis-sphinx build --source=doc/ --nowarn
-after_script:
-  - ./cc-test-reporter after-build --exit-code $TRAVIS_TEST_RESULT
-after_success:
-  - travis-sphinx deploy
- 
+ - "3.6"
+
+jobs:
+  include:
+    - stage: test
+      before_script:
+        - curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
+        - chmod +x ./cc-test-reporter
+        - ./cc-test-reporter before-build
+      script:
+       - python setup.py test
+      after_script:
+        - ./cc-test-reporter after-build --exit-code $TRAVIS_TEST_RESULT
+
+    - stage: documentation
+      install:
+        - pip install '.[doc]'
+      script:
+       - travis-sphinx build --source=doc/ --nowarn
+      after_success:
+       - travis-sphinx deploy
+
+    - stage: package
+      install:
+        - pip install twine
+      before_script:
+        - |
+          cat << EOF | tee ~/.pypirc 1>/dev/null
+          [distutils]
+          index-servers=
+              pypi
+          [pypi]
+            username: $PYPI_USERNAME
+            password: $PYPI_PASSWORD
+      script:
+        - python setup.py sdist bdist_wheel
+        - twine check dist/* 
+        - twine upload dist/*
